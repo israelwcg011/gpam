@@ -1,0 +1,207 @@
+
+# coding: utf-8
+
+# In[122]:
+
+
+#Lendo arquivos
+
+import csv
+
+with open('train.csv', encoding="utf8") as csvfile:
+    train_data = csv.reader(csvfile)
+    ids_train = []
+    label = []
+    mensagens_train = []
+    
+    for row in train_data:
+        a = row[0]
+        b = row[1]
+        c = row[2]
+        
+        ids_train.append(a)
+        label.append(b)
+        mensagens_train.append(c)
+        
+with open('test.csv', encoding = 'utf8') as csvfile:
+    test_data = csv.reader(csvfile)
+    ids_test = []
+    mensagens_test = []
+    
+    for row in test_data:
+        a = row[0]
+        b = row[1]
+        
+        ids_test.append(a)
+        mensagens_test.append(b)
+
+
+# In[123]:
+
+
+#pré processamento de datos
+
+import re
+import string
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+nltk.download('stopwords')
+nltk.download('punkt')
+
+#processar as mensagens para treino e para teste
+
+translator = str.maketrans('', '', string.punctuation)
+mensagens_train_processado = []
+mensagens_test_processado = []
+
+for row in range(1, len(mensagens_train)):
+    mensagens_train[row] = re.sub('[^A-Za-z0-9 ]', ' ', mensagens_train[row])
+    mensagens_train[row] = mensagens_train[row].translate(translator)
+    mensagens_train_processado.append(mensagens_train[row])
+    
+for row in range(1, len(mensagens_test)):
+    a = mensagens_test[row]
+    a = re.sub('[^A-Za-z0-9 ]', ' ', a)
+    a = a.translate(translator)
+    mensagens_test_processado.append(a)
+
+
+# In[163]:
+
+
+#Criando uma lista com todas as palavras
+
+stop_words = set(stopwords.words("english"))
+palavras_positivo = []
+palavras_negativo = []
+
+#listas de todas as palavras positivas e negativas
+
+for row in range(0, len(mensagens_train_processado) - 1):
+    texto = mensagens_train_processado[row + 1]
+    tokens = word_tokenize(texto)
+    resultado = [i for i in tokens if not i in stop_words]
+    a = label[row + 1]
+    if int(a) == 1:
+        palavras_negativo.extend(resultado)
+    else:
+        palavras_positivo.extend(resultado)
+    
+
+
+# In[138]:
+
+
+#funcões contadoras de frequência
+
+def contador_positivo(palavra):
+    contador = 0
+    for i in range(0, len(palavras_positivo) - 1):
+        if palavra == palavras_positivo[i]:
+            contador = contador + 1
+    
+    return contador, contador/len(palavras_positivo)
+
+def contador_negativo(palavra):
+    contador = 0
+    for i in range(0, len(palavras_negativo) - 1):
+        if palavra == palavras_negativo[i]:
+            contador = contador + 1
+    
+    return contador, contador/len(palavras_negativo)
+
+def contador_total(palavra):
+    
+    return contador_positivo(palavra)[0] + contador_negativo(palavra)[0], contador_positivo(palavra)[1] + contador_negativo(palavra)[1] 
+
+
+# In[160]:
+
+
+#classificador de sentimentos. O método utilizado aqui é o de Naive Bayes, considerando as frequências das palavras avaliadas
+#Se quiser ver a avaliação de um comentário individual, descomentar os prints
+
+def classificador(comentario):
+    comentario = re.sub('[^A-Za-z0-9 ]', '', comentario)
+    translator = str.maketrans('', '', string.punctuation)
+    comentario.translate(translator)
+    stop_words = set(stopwords.words("english"))
+    tokens = word_tokenize(comentario)
+    comentario_processado = [i for i in tokens if not i in stop_words]
+    
+    probabilidade_comentario_odio = 1
+    probabilidade_comentario_normal = 1
+    for i in range(0, len(comentario_processado) - 1):
+        if contador_total(comentario_processado[i])[0] != 0:
+            probabilidade_comentario_odio *= contador_negativo(comentario_processado[i])[0]/ contador_total(comentario_processado[i])[0]
+        else:
+            probabilidade_comentario_odio = 0
+        
+    for i in range(0, len(comentario_processado) - 1):
+        if contador_total(comentario_processado[i])[0] != 0:
+            probabilidade_comentario_normal *= contador_positivo(comentario_processado[i])[0]/ contador_total(comentario_processado[i])[0]
+        else:
+            probabilidade_comentario_normal = 0
+            
+    if (probabilidade_comentario_odio >= probabilidade_comentario_normal):
+        #print('Discurso de ódio')
+        return 1
+    elif(probabilidade_comentario_odio < probabilidade_comentario_normal):
+        #print('Não é um discurso de ódio')
+        return -1
+    elif(probabilidade_comentario_odio == 0 or probabilidade_comentario_normal == 0):
+        #print('Existem palavras fora do banco de dados. O algoritmo precida de mais dados.')
+        return 0
+
+
+# In[164]:
+
+
+#verificando a qualidade do modelo
+
+true_positive = 0
+false_negative = 0
+false_positive = 0
+true_negative = 0
+
+for row in range(0, len(mensagens_train_processado) - 1):
+    valor = classificador(mensagens_test_processado[row])
+    label_valor = int(label[row + 1])
+    if valor == 1 and valor == label_valor:
+        true_positive += 1
+    elif valor == 1 and valor != label_valor:
+        false_positive += 1
+    elif valor == -1 and valor == label_valor:
+        true_negative += 1
+    elif valor == -1 and valor != label_valor:
+        false_negative += 1
+    
+accuracy = (true_positive + true_negative) / (true_positive + false_negative + false_positive + true_negative)
+precision = true_positive / (true_positive + false_positive)
+recall = true_positive / (true_positive + false_negative)
+f_one = (2 * precision * recall) / (precision + recall)
+    
+print('Accuracy = ', accuracy)
+print('precision = ', precision)
+print('recall = ', recall)
+print('F1 = ', f_one)
+
+
+# In[159]:
+
+
+#classificando os comentários de teste
+
+cp = 0 #contador de comentários classificados como discurso de ódio
+cn = 0 #contador de comnetário classificados como normais
+
+for row in range(0, len(mensagens_test_processado) - 1):
+    valor = classificador(mensagens_test_processado[row])
+    if valor == 1:
+        cp += 1
+    elif valor == -1:
+        cn += -1
+        
+print('Nesse banco de dados temos ', cp, ' comentários classificados como discurso de ódio e ', -1 * cn, ' comentários classificados como discurso normal.')
+
