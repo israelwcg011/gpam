@@ -1,1 +1,1 @@
-Análise de sentimentos de comentários no twitter
+Sentimental analysis with Twitter comments. Using Python.
